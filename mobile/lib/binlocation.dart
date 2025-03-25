@@ -1,51 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
-import 'dart:async';
 
-class BinLocation extends StatefulWidget {
-  const BinLocation({Key? key}) : super(key: key);
-
+class GoogleMapScreen extends StatefulWidget {
   @override
-  _BinLocationState createState() => _BinLocationState();
+  _GoogleMapScreenState createState() => _GoogleMapScreenState();
 }
 
-class _BinLocationState extends State<BinLocation> {
-  final Completer<GoogleMapController> _controller = Completer();
-  bool _mapCreated = false;
-
-  // Set default camera position
-  static const CameraPosition _initialPosition = CameraPosition(
-    target: LatLng(37.42796133580664, -122.085749655962),
-    zoom: 14.0,
-  );
-
-  // Example bin locations
-  final Set<Marker> _markers = {};
+class _GoogleMapScreenState extends State<GoogleMapScreen> {
+  late GoogleMapController _mapController;
+  Set<Marker> _markers = {};
+  LatLng _currentLocation = LatLng(
+    6.9271,
+    79.8612,
+  ); // Default location (Colombo)
+  BitmapDescriptor? binIcon;
 
   @override
   void initState() {
     super.initState();
-    _addMarkers();
+    _getCurrentLocation();
+    _fetchBinsData();
   }
 
-  void _addMarkers() {
+  // Fetch Bin Data from Firebase Firestore
+  Future<void> _fetchBinsData() async {
+    FirebaseFirestore.instance
+        .collection('bins')
+        .get()
+        .then((snapshot) {
+          if (snapshot.docs.isNotEmpty) {
+            setState(() {
+              _markers.addAll(
+                snapshot.docs.map((doc) {
+                  var data = doc.data();
+                  return Marker(
+                    markerId: MarkerId(data['id']),
+                    position: LatLng(data['lat'], data['lng']),
+                    icon:
+                        data['status'] == 'Full'
+                            ? BitmapDescriptor.defaultMarkerWithHue(
+                              BitmapDescriptor.hueRed,
+                            )
+                            : BitmapDescriptor.defaultMarkerWithHue(
+                              BitmapDescriptor.hueGreen,
+                            ),
+                    infoWindow: InfoWindow(
+                      title: data['location'],
+                      snippet:
+                          "Status: ${data['status']} \nWaste Level: ${data['wasteLevel']}",
+                    ),
+                  );
+                }).toSet(),
+              );
+            });
+          }
+        })
+        .catchError((error) {
+          print("Error fetching bins: $error");
+        });
+  }
+
+  // Get User's Current Location
+  Future<void> _getCurrentLocation() async {
+    LocationPermission permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      print("Location permission denied");
+      return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
     setState(() {
+      _currentLocation = LatLng(position.latitude, position.longitude);
       _markers.add(
-        const Marker(
-          markerId: MarkerId('bin1'),
-          position: LatLng(37.42796133580664, -122.085749655962),
-          infoWindow: InfoWindow(
-            title: 'Bin Location 1',
-            snippet: 'Recycling Bin',
-          ),
-        ),
-      );
-      _markers.add(
-        const Marker(
-          markerId: MarkerId('bin2'),
-          position: LatLng(37.42496133580664, -122.082749655962),
-          infoWindow: InfoWindow(title: 'Bin Location 2', snippet: 'Trash Bin'),
+        Marker(
+          markerId: MarkerId("user_location"),
+          position: _currentLocation,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+          infoWindow: InfoWindow(title: "You are here"),
         ),
       );
     });
@@ -54,50 +90,16 @@ class _BinLocationState extends State<BinLocation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bin Location'),
-        backgroundColor: Colors.green,
-      ),
-      body: Stack(
-        children: [
-          GoogleMap(
-            mapType: MapType.normal,
-            initialCameraPosition: _initialPosition,
-            markers: _markers,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            onMapCreated: (GoogleMapController controller) {
-              _controller.complete(controller);
-              setState(() {
-                _mapCreated = true;
-              });
-            },
-          ),
-          if (!_mapCreated) const Center(child: CircularProgressIndicator()),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        onPressed: () async {
-          try {
-            final Position position = await Geolocator.getCurrentPosition();
-            final GoogleMapController controller = await _controller.future;
-            controller.animateCamera(
-              CameraUpdate.newCameraPosition(
-                CameraPosition(
-                  target: LatLng(position.latitude, position.longitude),
-                  zoom: 14,
-                ),
-              ),
-            );
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error getting location: $e')),
-            );
-          }
+      appBar: AppBar(title: Text("Smart Waste Bins")),
+      body: GoogleMap(
+        initialCameraPosition: CameraPosition(
+          target: _currentLocation,
+          zoom: 13,
+        ),
+        markers: _markers,
+        onMapCreated: (GoogleMapController controller) {
+          _mapController = controller;
         },
-        child: const Icon(Icons.my_location),
       ),
     );
   }

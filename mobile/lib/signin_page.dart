@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'admin_dashboard.dart';
 import 'dashboarduser.dart';
 
 class SignInPage extends StatefulWidget {
@@ -16,8 +17,9 @@ class _SignInPageState extends State<SignInPage> {
   final TextEditingController _passwordController = TextEditingController();
   bool _obscureText = true;
 
-  // Firebase Auth instance
+  // Firebase instances
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void dispose() {
@@ -35,21 +37,8 @@ class _SignInPageState extends State<SignInPage> {
           password: _passwordController.text,
         );
 
-        // Show success message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sign in successful!'),
-              backgroundColor: Color(0xFF2E7D32),
-              duration: Duration(seconds: 1),
-            ),
-          );
-          // Navigate to user dashboard page after successful login
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const EcoBinDashboard()),
-          );
-        }
+        // Check if user is an admin
+        await _checkUserRole(userCredential.user);
       } on FirebaseAuthException catch (e) {
         // Handle different Firebase Auth exceptions
         String errorMessage = 'Incorrect email or password.';
@@ -64,18 +53,72 @@ class _SignInPageState extends State<SignInPage> {
           errorMessage = 'This account has been disabled.';
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
-        );
+        _showErrorSnackBar(errorMessage);
       } catch (e) {
         // Handle generic errors
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showErrorSnackBar('Error: ${e.toString()}');
       }
+    }
+  }
+
+  Future<void> _checkUserRole(User? user) async {
+    if (user == null) return;
+
+    try {
+      // Query Firestore to check user role
+      DocumentSnapshot userDoc =
+          await _firestore.collection('users').doc(user.uid).get();
+
+      // Check if user exists and has an admin role
+      if (userDoc.exists) {
+        bool isAdmin = userDoc.get('role') == 'admin';
+
+        if (mounted) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Sign in successful! ${isAdmin ? 'Admin' : 'User'} login.',
+              ),
+              backgroundColor: const Color(0xFF2E7D32),
+              duration: const Duration(seconds: 1),
+            ),
+          );
+
+          // Navigate to appropriate dashboard based on role
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) =>
+                      isAdmin ? AdminDashboard() : const EcoBinDashboard(),
+            ),
+          );
+        }
+      } else {
+        // If user document doesn't exist, treat as a regular user
+        _navigateToUserDashboard();
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error checking user role: ${e.toString()}');
+      _navigateToUserDashboard(); // Fallback to user dashboard
+    }
+  }
+
+  void _navigateToUserDashboard() {
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const EcoBinDashboard()),
+      );
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
     }
   }
 

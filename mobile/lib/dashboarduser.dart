@@ -1,26 +1,54 @@
 import 'package:flutter/material.dart';
-import 'binlocation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_application_1/binlocation.dart';
+
 import 'binreview.dart';
 import 'eventsnupdates.dart';
 import 'profile.dart';
 import 'request_bins.dart';
-import 'signin_page.dart';
-import 'signup_page.dart';
-// Import your other pages here
-// import 'find_bins_page.dart';
-// import 'view_history_page.dart';
-// import 'bin_types_page.dart';
-// import 'payment_page.dart';
-// import 'nearby_bins_page.dart';
-// import 'green_points_page.dart';
-// import 'eco_tips_page.dart';
-// import 'notifications_page.dart';
-// import 'profile_page.dart';
-// import 'eco_updates_page.dart';
-// import 'news_detail_page.dart';
+import 'signin_page.dart' as signin;
+import 'signup_page.dart' as signup;
 
-class EcoBinDashboard extends StatelessWidget {
-  const EcoBinDashboard({Key? key}) : super(key: key);
+class EcoBinDashboard extends StatefulWidget {
+  const EcoBinDashboard({super.key});
+
+  @override
+  State<EcoBinDashboard> createState() => _EcoBinDashboardState();
+}
+
+class _EcoBinDashboardState extends State<EcoBinDashboard> {
+  User? _currentUser;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCurrentUser();
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      setState(() {
+        _currentUser = user;
+      });
+    });
+  }
+
+  Future<void> _checkCurrentUser() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    _currentUser = FirebaseAuth.instance.currentUser;
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    setState(() {
+      _currentUser = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,354 +74,171 @@ class EcoBinDashboard extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined, color: Colors.grey),
-            onPressed: () {
-              // Uncomment when you have the NotificationsPage ready
-              // Navigator.push(
-              //   context,
-              //   MaterialPageRoute(
-              //     builder: (context) => const NotificationsPage(),
-              //   ),
-              // );
-            },
+            onPressed: () {},
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome section
-            const Text(
-              "Welcome to EcoBin",
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2E7D32),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "Smart waste management",
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 24),
-
-            // Auth cards
-            Row(
-              children: [
-                Expanded(
-                  child: _buildAuthCard(
-                    title: "Sign In",
-                    isPrimary: true,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SignInPage(),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _currentUser != null
+                          ? "Welcome, ${_currentUser!.displayName ?? 'User'}"
+                          : "Welcome to EcoBin",
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Smart waste management",
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 24),
+                    if (_currentUser == null) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildAuthCard(
+                              title: "Sign In",
+                              isPrimary: true,
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => const signin.SignInPage(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildAuthCard(
+                              title: "Sign Up",
+                              isPrimary: false,
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => const signup.SignUpPage(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                    ] else ...[
+                      _buildUserProfileCard(),
+                      const SizedBox(height: 24),
+                    ],
+                    const Text(
+                      "Quick Actions",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: 1.5,
+                      children: [
+                        _buildServiceCard(
+                          icon: Icons.location_on_outlined,
+                          title: "Find Bins",
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => GoogleMapScreen(),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildAuthCard(
-                    title: "Sign Up",
-                    isPrimary: false,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SignUpPage(),
+                        _buildServiceCard(
+                          icon: Icons.history_outlined,
+                          title: "View History",
+                          onPressed: () {
+                            if (_currentUser != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => ProfileOfUser(children: []),
+                                ),
+                              );
+                            } else {
+                              _showLoginRequiredDialog();
+                            }
+                          },
                         ),
-                      );
-                    },
-                  ),
+                        _buildServiceCard(
+                          icon: Icons.category_outlined,
+                          title: "Bin Request",
+                          onPressed: () {
+                            if (_currentUser != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const BinRequestPage(),
+                                ),
+                              );
+                            } else {
+                              _showLoginRequiredDialog();
+                            }
+                          },
+                        ),
+                        _buildServiceCard(
+                          icon: Icons.star_outline,
+                          title: "Rate & Reviews",
+                          onPressed: () {
+                            if (_currentUser != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const BinReviewPage(),
+                                ),
+                              );
+                            } else {
+                              _showLoginRequiredDialog();
+                            }
+                          },
+                        ),
+                        _buildServiceCard(
+                          icon: Icons.event_available_outlined,
+                          title: "Events & Updates",
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => const EventsAndUpdatesPage(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 32),
-
-            // Quick actions
-            const Text(
-              "Quick Actions",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2E7D32),
               ),
-            ),
-            const SizedBox(height: 16),
-
-            // Quick actions grid
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.5,
-              children: [
-                _buildServiceCard(
-                  icon: Icons.location_on_outlined,
-                  title: "Find Bins",
-                  onPressed: () {
-                    // Uncomment when you have the FindBinsPage ready
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const BinLocation(),
-                      ),
-                    );
-                  },
-                ),
-                _buildServiceCard(
-                  icon: Icons.history_outlined,
-                  title: "View History",
-                  onPressed: () {
-                    // Uncomment when you have the ViewHistoryPage ready
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (context) => const ViewHistoryPage(),
-                    //   ),
-                    // );
-                  },
-                ),
-                _buildServiceCard(
-                  icon: Icons.category_outlined,
-                  title: "Bin Request",
-                  onPressed: () {
-                    // Uncomment when you have the BinTypesPage ready
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const BinRequestPage(),
-                      ),
-                    );
-                  },
-                ),
-
-                _buildServiceCard(
-                  icon: Icons.star_outline,
-                  title: "Rate & Reviews",
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const BinReviewPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildServiceCard(
-                  icon: Icons.event_available_outlined,
-                  title: "Events & Updates",
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const EventsAndUpdatesPage(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 32),
-
-            // Featured section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Featured",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2E7D32),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // Uncomment when you have the AllFeaturedPage ready
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (context) => const AllFeaturedPage(),
-                    //   ),
-                    // );
-                  },
-                  style: TextButton.styleFrom(
-                    minimumSize: Size.zero,
-                    padding: EdgeInsets.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text(
-                    "See All",
-                    style: TextStyle(color: Color(0xFF4CAF50)),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Featured cards
-            _buildFeaturedCard(
-              title: "Find Nearby Bins",
-              description: "Locate recycling points near you",
-              icon: Icons.location_on_outlined,
-              onPressed: () {
-                // Uncomment when you have the NearbyBinsPage ready
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => const NearbyBinsPage(),
-                //   ),
-                // );
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildFeaturedCard(
-              title: "Earn Green Points",
-              description: "Get rewards for recycling",
-              icon: Icons.monetization_on_outlined,
-              onPressed: () {
-                // Uncomment when you have the GreenPointsPage ready
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => const GreenPointsPage(),
-                //   ),
-                // );
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildFeaturedCard(
-              title: "Eco Tips & Updates",
-              description: "Learn how to protect our environment",
-              icon: Icons.eco_outlined,
-              onPressed: () {
-                // Uncomment when you have the EcoTipsPage ready
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => const EcoTipsPage(),
-                //   ),
-                // );
-              },
-            ),
-
-            const SizedBox(height: 32),
-
-            // Environmental updates section
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Eco Updates",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2E7D32),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // Uncomment when you have the AllEcoUpdatesPage ready
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (context) => const AllEcoUpdatesPage(),
-                    //   ),
-                    // );
-                  },
-                  style: TextButton.styleFrom(
-                    minimumSize: Size.zero,
-                    padding: EdgeInsets.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text(
-                    "See All",
-                    style: TextStyle(color: Color(0xFF4CAF50)),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            _buildEcoUpdateCard(
-              title: "Reduce Plastic Waste",
-              description:
-                  "Simple steps to minimize plastic in your daily life",
-              date: "Mar 15, 2025",
-              onLearnMorePressed: () {
-                // Uncomment when you have the specific update page ready
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => const EcoUpdateDetailPage(
-                //       title: "Reduce Plastic Waste",
-                //       date: "Mar 15, 2025",
-                //       // Pass other required parameters
-                //     ),
-                //   ),
-                // );
-              },
-            ),
-            const SizedBox(height: 12),
-            _buildEcoUpdateCard(
-              title: "Community Cleanup Day",
-              description: "Join us this weekend to clean local waterways",
-              date: "Mar 22, 2025",
-              onLearnMorePressed: () {
-                // Uncomment when you have the specific update page ready
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => const EcoUpdateDetailPage(
-                //       title: "Community Cleanup Day",
-                //       date: "Mar 22, 2025",
-                //       // Pass other required parameters
-                //     ),
-                //   ),
-                // );
-              },
-            ),
-
-            const SizedBox(height: 32),
-
-            // News section
-            const Text(
-              "News",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2E7D32),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            _buildNewsCard(
-              onLearnMorePressed: () {
-                // Uncomment when you have the NewsDetailPage ready
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => const NewsDetailPage(
-                //       title: "New Recycling Center",
-                //       // Pass other required parameters
-                //     ),
-                //   ),
-                // );
-              },
-            ),
-          ],
-        ),
-      ),
       bottomNavigationBar: BottomNavigationBar(
         selectedItemColor: const Color(0xFF4CAF50),
         unselectedItemColor: Colors.grey,
@@ -424,13 +269,10 @@ class EcoBinDashboard extends StatelessWidget {
         ],
         currentIndex: 0,
         onTap: (index) {
-          // Handle bottom navigation bar item clicks
           switch (index) {
             case 0:
-              // Already on home page
               break;
             case 1:
-              // Navigate to Events page
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -439,27 +281,121 @@ class EcoBinDashboard extends StatelessWidget {
               );
               break;
             case 2:
-              // Navigate to Alerts page
-              // Uncomment when you have the AlertsPage ready
-              // Navigator.push(
-              //   context,
-              //   MaterialPageRoute(
-              //     builder: (context) => const AlertsPage(),
-              //   ),
-              // );
               break;
             case 3:
-              // Navigate to Profile page
-              // Uncomment when you have the ProfilePage ready
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileOfUser(children: []),
-                ),
-              );
+              if (_currentUser != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileOfUser(children: []),
+                  ),
+                );
+              } else {
+                _showLoginRequiredDialog();
+              }
               break;
           }
         },
+      ),
+    );
+  }
+
+  void _showLoginRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Login Required"),
+          content: const Text(
+            "You need to be logged in to access this feature. Would you like to sign in now?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const signin.SignInPage(),
+                  ),
+                );
+              },
+              child: const Text(
+                "Sign In",
+                style: TextStyle(color: Color(0xFF4CAF50)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildUserProfileCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: const Color(0xFFE8F5E9),
+              backgroundImage:
+                  _currentUser?.photoURL != null
+                      ? NetworkImage(_currentUser!.photoURL!)
+                      : null,
+              child:
+                  _currentUser?.photoURL == null
+                      ? const Icon(
+                        Icons.person,
+                        size: 30,
+                        color: Color(0xFF4CAF50),
+                      )
+                      : null,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _currentUser?.displayName ?? "EcoBin User",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF2E7D32),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _currentUser?.email ?? "",
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _signOut,
+              icon: const Icon(
+                Icons.logout,
+                size: 18,
+                color: Color(0xFF4CAF50),
+              ),
+              label: const Text(
+                "Sign Out",
+                style: TextStyle(color: Color(0xFF4CAF50)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -508,11 +444,10 @@ class EcoBinDashboard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
+        side: BorderSide(color: Colors.grey.shade100, width: 1),
       ),
       child: InkWell(
-        onTap:
-            onPressed, // This was the key issue - using the passed in onPressed
+        onTap: onPressed,
         borderRadius: BorderRadius.circular(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -529,208 +464,6 @@ class EcoBinDashboard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildFeaturedCard({
-    required String title,
-    required String description,
-    required IconData icon,
-    required VoidCallback onPressed,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onPressed, // Using the passed in onPressed callback
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 24, color: const Color(0xFF4CAF50)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF2E7D32),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEcoUpdateCard({
-    required String title,
-    required String description,
-    required String date,
-    required VoidCallback onLearnMorePressed,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onLearnMorePressed, // Using the whole card as clickable
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.eco_outlined,
-                      size: 20,
-                      color: Color(0xFF4CAF50),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF2E7D32),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                description,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    date,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: onLearnMorePressed,
-                    style: TextButton.styleFrom(
-                      minimumSize: Size.zero,
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      "Learn More",
-                      style: TextStyle(
-                        color: Color(0xFF4CAF50),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNewsCard({required VoidCallback onLearnMorePressed}) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 120,
-            decoration: const BoxDecoration(
-              color: Color(0xFFE8F5E9),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
-            child: const Center(
-              child: Icon(
-                Icons.nature_outlined,
-                size: 40,
-                color: Color(0xFF4CAF50),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "New Recycling Center",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF2E7D32),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Join us for the grand opening of our new recycling center this weekend!",
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: onLearnMorePressed,
-                    child: const Text(
-                      "Learn More",
-                      style: TextStyle(
-                        color: Color(0xFF4CAF50),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
