@@ -1,168 +1,225 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'Events_admin.dart';
 import 'admin_profile.dart';
 import 'binStatus_admin.dart';
+import 'feedback_look.dart';
 import 'user_manage.dart';
-import 'binlocation.dart'; // Assume this is the new bin location page
+import 'binlocation.dart';
+import 'signin_page.dart' as signin;
 
-class AdminDashboard extends StatelessWidget {
+class AdminDashboard extends StatefulWidget {
+  const AdminDashboard({Key? key}) : super(key: key);
+
+  @override
+  _AdminDashboardState createState() => _AdminDashboardState();
+}
+
+class _AdminDashboardState extends State<AdminDashboard> {
+  User? _currentAdmin;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCurrentUser();
+  }
+
+  Future<void> _checkCurrentUser() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    _currentAdmin = FirebaseAuth.instance.currentUser;
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const signin.SignInPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SvgPicture.asset(
-              'assets/icons/eco_bin_icon.svg', // You'll need to create this SVG
-              height: 30,
-              width: 30,
-              color: Colors.green.shade800,
-            ),
-            SizedBox(width: 10),
-            Text(
-              'EcoBin',
+            Icon(Icons.admin_panel_settings_outlined, color: Colors.green[700]),
+            const SizedBox(width: 8),
+            const Text(
+              "EcoBin Admin",
               style: TextStyle(
-                color: Colors.green.shade800,
-                fontWeight: FontWeight.bold,
                 fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2E7D32),
               ),
             ),
           ],
         ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.green.shade800),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.logout,
+              color: Color.fromARGB(255, 27, 188, 33),
+            ),
+            onPressed: _signOut,
+          ),
+        ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Dashboard Header
-              Text(
-                'Waste Management\nAdministration',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.green.shade900.withOpacity(0.8),
-                  letterSpacing: 0.5,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Welcome, Admin",
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E7D32),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Manage waste disposal efficiently",
+                      style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildAdminProfileCard(),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: GridView.count(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 1.2,
+                        children: [
+                          _buildAdminServiceCard(
+                            icon: Icons.people_outline,
+                            title: "User Management",
+                            onPressed: () => _navigateTo(UserManagementPage()),
+                          ),
+                          _buildAdminServiceCard(
+                            icon: Icons.delete_outline,
+                            title: "Bin Status",
+                            onPressed: () => _navigateTo(BinStatusPage()),
+                          ),
+                          _buildAdminServiceCard(
+                            icon: Icons.location_on_outlined,
+                            title: "Bin Locations",
+                            onPressed: () => _navigateTo(GoogleMapScreen()),
+                          ),
+                          _buildAdminServiceCard(
+                            icon: Icons.event_available_outlined,
+                            title: "Event Management",
+                            onPressed: () => _navigateTo(EventManagementPage()),
+                          ),
+                          _buildAdminServiceCard(
+                            icon: Icons.feedback_outlined,
+                            title: "Feedback Management",
+                            onPressed:
+                                () => _navigateTo(FeedbackManagementPage()),
+                          ),
+                          _buildAdminServiceCard(
+                            icon: Icons.person_outline,
+                            title: "Admin Profile",
+                            onPressed: () => _navigateTo(AdminProfileApp()),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(height: 40),
+    );
+  }
 
-              // Dashboard Buttons
-              _ProfessionalDashboardButton(
-                icon: Icons.people_outline,
-                label: 'User Management',
-                iconColor: Colors.green.shade700,
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => UserManagementPage(),
-                      ),
-                    ),
+  void _navigateTo(Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => page));
+  }
+
+  Widget _buildAdminProfileCard() {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: Colors.green[100],
+              child: const Icon(
+                Icons.admin_panel_settings,
+                size: 30,
+                color: Colors.green,
               ),
-              SizedBox(height: 16),
-              _ProfessionalDashboardButton(
-                icon: Icons.delete_outline,
-                label: 'Bin Status',
-                iconColor: Colors.green.shade700,
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => BinStatusPage()),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _currentAdmin?.displayName ?? "EcoBin Admin",
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF2E7D32),
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _currentAdmin?.email ?? "",
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                ],
               ),
-              SizedBox(height: 16),
-              _ProfessionalDashboardButton(
-                icon: Icons.location_on_outlined,
-                label: 'Bin Locations',
-                iconColor: Colors.green.shade700,
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => GoogleMapScreen(),
-                      ),
-                    ),
-              ),
-              SizedBox(height: 16),
-              _ProfessionalDashboardButton(
-                icon: Icons.person_outline,
-                label: 'Admin Profile',
-                iconColor: Colors.green.shade700,
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => ProfilePage()),
-                    ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
-}
 
-class _ProfessionalDashboardButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color iconColor;
-  final VoidCallback onPressed;
-
-  const _ProfessionalDashboardButton({
-    required this.icon,
-    required this.label,
-    required this.iconColor,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
+  Widget _buildAdminServiceCard({
+    required IconData icon,
+    required String title,
+    required VoidCallback onPressed,
+  }) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: onPressed,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.green.shade100.withOpacity(0.4),
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onPressed,
-          child: Container(
-            padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                Icon(icon, size: 24, color: iconColor),
-                SizedBox(width: 16),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.green.shade900.withOpacity(0.9),
-                  ),
-                ),
-              ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 40, color: Colors.green[700]),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF2E7D32),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

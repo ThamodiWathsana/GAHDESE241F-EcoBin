@@ -1,4 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Events & Updates',
+      theme: ThemeData(
+        primarySwatch: Colors.green,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: EventsAndUpdatesPage(),
+    );
+  }
+}
 
 class EventsAndUpdatesPage extends StatefulWidget {
   const EventsAndUpdatesPage({Key? key}) : super(key: key);
@@ -10,6 +32,7 @@ class EventsAndUpdatesPage extends StatefulWidget {
 class _EventsAndUpdatesPageState extends State<EventsAndUpdatesPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -29,20 +52,17 @@ class _EventsAndUpdatesPageState extends State<EventsAndUpdatesPage>
       backgroundColor: Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF2E7D32), // Changed to green
+        backgroundColor: const Color(0xFF2E7D32),
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: Colors.white,
-          ), // Changed icon color to white
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           "Events & Updates",
           style: TextStyle(
             fontSize: 20,
-            fontWeight: FontWeight.bold, // Changed to bold
-            color: Colors.white, // Changed text color to white
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
           ),
         ),
         bottom: TabBar(
@@ -68,111 +88,103 @@ class _EventsAndUpdatesPageState extends State<EventsAndUpdatesPage>
   }
 
   Widget _buildEventsTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildEventCard(
-          title: "Community Cleanup Day",
-          date: "Mar 22, 2025",
-          time: "09:00 AM - 01:00 PM",
-          location: "Central Park",
-          description:
-              "Join us for our monthly community cleanup event. Gloves and bags will be provided. Help us keep our parks clean!",
-          isRegistered: true,
-        ),
-        const SizedBox(height: 16),
-        _buildEventCard(
-          title: "Recycling Workshop",
-          date: "Mar 28, 2025",
-          time: "02:00 PM - 04:00 PM",
-          location: "Community Center",
-          description:
-              "Learn about creative ways to reuse common household items. Bring your own recyclables to transform them into useful items.",
-          isRegistered: false,
-        ),
-        const SizedBox(height: 16),
-        _buildEventCard(
-          title: "Earth Hour Celebration",
-          date: "Mar 30, 2025",
-          time: "08:30 PM - 10:00 PM",
-          location: "City Square",
-          description:
-              "Join the global movement by turning off your lights for one hour to raise awareness about climate change. Live music and speeches included.",
-          isRegistered: false,
-        ),
-        const SizedBox(height: 16),
-        _buildEventCard(
-          title: "Green Market Fair",
-          date: "Apr 05, 2025",
-          time: "10:00 AM - 05:00 PM",
-          location: "Riverside Park",
-          description:
-              "Shop sustainable products from local vendors. Food, crafts, and eco-friendly items available.",
-          isRegistered: false,
-        ),
-        const SizedBox(height: 16),
-        _buildEventCard(
-          title: "Tree Planting Day",
-          date: "Apr 12, 2025",
-          time: "10:00 AM - 02:00 PM",
-          location: "Highland Hills",
-          description:
-              "Help us plant 100 new trees in our neighborhood. Tools and saplings provided. Bring water and wear comfortable clothes.",
-          isRegistered: false,
-        ),
-      ],
+    return StreamBuilder<QuerySnapshot>(
+      stream:
+          _firestore
+              .collection('events')
+              .orderBy('date', descending: false)
+              .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No events found'));
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            var eventData =
+                snapshot.data!.docs[index].data() as Map<String, dynamic>;
+
+            return Column(
+              children: [
+                _buildEventCard(
+                  title: eventData['title'] ?? 'Event Title',
+                  date: _formatDate(eventData['date']),
+                  time: eventData['time'] ?? 'Time Not Specified',
+                  location: eventData['location'] ?? 'Location Not Specified',
+                  description:
+                      eventData['description'] ?? 'No description available',
+                  isRegistered: eventData['isRegistered'] ?? false,
+                ),
+                const SizedBox(height: 16),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
   Widget _buildUpdatesTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildUpdateCard(
-          title: "Reduce Plastic Waste",
-          date: "Mar 15, 2025",
-          description:
-              "Simple steps to minimize plastic in your daily life. Learn about alternatives to common single-use plastics and how to properly recycle plastic items.",
-          category: "Education",
-          imageIcon: Icons.eco_outlined,
-        ),
-        const SizedBox(height: 16),
-        _buildUpdateCard(
-          title: "New Recycling Center Opening",
-          date: "Mar 18, 2025",
-          description:
-              "Visit our newest recycling center on Main Street. State-of-the-art facilities for all your recycling needs, including electronics and hazardous waste.",
-          category: "Announcement",
-          imageIcon: Icons.location_on_outlined,
-        ),
-        const SizedBox(height: 16),
-        _buildUpdateCard(
-          title: "City Plans to Ban Single-Use Plastics",
-          date: "Mar 10, 2025",
-          description:
-              "The city council has proposed a new ordinance to ban single-use plastics in restaurants and retail establishments starting June 2025.",
-          category: "Policy",
-          imageIcon: Icons.policy_outlined,
-        ),
-        const SizedBox(height: 16),
-        _buildUpdateCard(
-          title: "Water Conservation Tips",
-          date: "Mar 05, 2025",
-          description:
-              "With summer approaching, learn how to conserve water at home and in your garden. Simple changes can lead to significant savings.",
-          category: "Education",
-          imageIcon: Icons.water_drop_outlined,
-        ),
-        const SizedBox(height: 16),
-        _buildUpdateCard(
-          title: "EcoBin App Updates",
-          date: "Mar 01, 2025",
-          description:
-              "We've added new features to make recycling easier! Check out the improved bin locator and waste sorting guide in our latest update.",
-          category: "App Updates",
-          imageIcon: Icons.system_update_outlined,
-        ),
-      ],
+    return StreamBuilder<QuerySnapshot>(
+      stream:
+          _firestore
+              .collection('updates')
+              .orderBy('date', descending: true)
+              .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No updates found'));
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            var updateData =
+                snapshot.data!.docs[index].data() as Map<String, dynamic>;
+
+            return Column(
+              children: [
+                _buildUpdateCard(
+                  title: updateData['title'] ?? 'Update Title',
+                  date: _formatDate(updateData['date']),
+                  description:
+                      updateData['description'] ?? 'No description available',
+                  category: updateData['category'] ?? 'Uncategorized',
+                  imageIcon: _getCategoryIcon(updateData['category']),
+                ),
+                const SizedBox(height: 16),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -582,5 +594,53 @@ class _EventsAndUpdatesPageState extends State<EventsAndUpdatesPage>
       labelStyle: TextStyle(color: Colors.grey[800]),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     );
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'Date Not Specified';
+
+    DateTime dateTime;
+    if (date is Timestamp) {
+      dateTime = date.toDate();
+    } else if (date is DateTime) {
+      dateTime = date;
+    } else {
+      return 'Invalid Date';
+    }
+
+    return '${_getMonthName(dateTime.month)} ${dateTime.day}, ${dateTime.year}';
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
+  }
+
+  IconData _getCategoryIcon(String? category) {
+    switch (category?.toLowerCase()) {
+      case 'education':
+        return Icons.eco_outlined;
+      case 'announcement':
+        return Icons.location_on_outlined;
+      case 'policy':
+        return Icons.policy_outlined;
+      case 'app updates':
+        return Icons.system_update_outlined;
+      default:
+        return Icons.info_outline;
+    }
   }
 }

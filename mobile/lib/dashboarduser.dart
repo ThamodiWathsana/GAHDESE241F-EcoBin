@@ -180,8 +180,7 @@ class _EcoBinDashboardState extends State<EcoBinDashboard> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder:
-                                      (context) => ProfileOfUser(children: []),
+                                  builder: (context) => ProfileOfUser(),
                                 ),
                               );
                             } else {
@@ -213,7 +212,7 @@ class _EcoBinDashboardState extends State<EcoBinDashboard> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const BinReviewPage(),
+                                  builder: (context) => BinReviewPage(),
                                 ),
                               );
                             } else {
@@ -286,9 +285,7 @@ class _EcoBinDashboardState extends State<EcoBinDashboard> {
               if (_currentUser != null) {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => ProfileOfUser(children: []),
-                  ),
+                  MaterialPageRoute(builder: (context) => ProfileOfUser()),
                 );
               } else {
                 _showLoginRequiredDialog();

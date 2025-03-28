@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:path/path.dart' as path;
+import 'dart:io';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(const ProfileOfUser(children: []));
+  runApp(const ProfileOfUser());
 }
 
 class ProfileOfUser extends StatelessWidget {
-  const ProfileOfUser({Key? key, required List<Text> children})
-    : super(key: key);
+  const ProfileOfUser({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -77,9 +80,11 @@ class _ProfilePageState extends State<ProfilePage> {
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
   bool _isEditing = false;
-  String _profileImagePath = '';
+  String _profileImageUrl = '';
   bool _isLoading = true;
   User? _currentUser;
+  File? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -100,7 +105,6 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  // Get current user from Firebase Auth
   Future<void> _getCurrentUser() async {
     _currentUser = FirebaseAuth.instance.currentUser;
     if (_currentUser != null) {
@@ -112,13 +116,12 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Fetch user data from Firestore
   Future<void> _fetchUserData() async {
     try {
       DocumentSnapshot doc =
           await FirebaseFirestore.instance
               .collection('users')
-              .doc(_currentUser!.uid) // Use current user's UID
+              .doc(_currentUser!.uid)
               .get();
 
       if (doc.exists) {
@@ -128,15 +131,16 @@ class _ProfilePageState extends State<ProfilePage> {
           _emailController.text = _currentUser!.email ?? '';
           _phoneController.text = data['phone'] ?? '';
           _addressController.text = data['address'] ?? '';
+          _profileImageUrl = data['photoURL'] ?? '';
           _isLoading = false;
         });
       } else {
-        // If document doesn't exist yet, use data from Firebase Auth
         setState(() {
           _fullNameController.text = _currentUser!.displayName ?? '';
           _emailController.text = _currentUser!.email ?? '';
           _phoneController.text = _currentUser!.phoneNumber ?? '';
           _addressController.text = '';
+          _profileImageUrl = _currentUser!.photoURL ?? '';
           _isLoading = false;
         });
       }
@@ -154,27 +158,84 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  // Save updated profile to Firestore
+  Future<void> _pickImage() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking image: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _saveProfile() async {
     if (_formKey.currentState!.validate()) {
       try {
+        setState(() {
+          _isLoading = true;
+        });
+
+        String? photoURL;
+        if (_selectedImage != null) {
+          String filename = path.basename(_selectedImage!.path);
+          int dotIndex = filename.indexOf('.');
+          String fileExtension;
+          if (dotIndex != -1 && dotIndex < filename.length - 1) {
+            fileExtension = filename.substring(dotIndex + 1);
+          } else {
+            fileExtension = 'jpg'; // default extension
+          }
+
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('profile_pictures')
+              .child(
+                '${_currentUser!.uid}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension',
+              );
+          await storageRef.putFile(_selectedImage!);
+          photoURL = await storageRef.getDownloadURL();
+
+          await _currentUser!.updatePhotoURL(photoURL);
+        }
+
+        Map<String, dynamic> userData = {
+          'name': _fullNameController.text,
+          'email': _emailController.text,
+          'phone': _phoneController.text,
+          'address': _addressController.text,
+        };
+
+        if (photoURL != null) {
+          userData['photoURL'] = photoURL;
+        }
+
         await FirebaseFirestore.instance
             .collection('users')
-            .doc(_currentUser!.uid) // Use current user's UID
-            .set({
-              'name': _fullNameController.text,
-              'email': _emailController.text,
-              'phone': _phoneController.text,
-              'address': _addressController.text,
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            .doc(_currentUser!.uid)
+            .set(userData, SetOptions(merge: true));
 
-        // Also update displayName in Firebase Auth
         await _currentUser!.updateDisplayName(_fullNameController.text);
 
         setState(() {
           _isEditing = false;
+          _isLoading = false;
+          _selectedImage = null;
+          _profileImageUrl = photoURL ?? _profileImageUrl;
         });
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profile updated successfully'),
@@ -183,6 +244,9 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
       } catch (e) {
+        setState(() {
+          _isLoading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating profile: $e'),
@@ -266,20 +330,25 @@ class _ProfilePageState extends State<ProfilePage> {
                                       radius: 58,
                                       backgroundColor: Colors.grey[100],
                                       backgroundImage:
-                                          _currentUser!.photoURL != null
-                                              ? NetworkImage(
-                                                    _currentUser!.photoURL!,
+                                          _selectedImage != null
+                                              ? FileImage(_selectedImage!)
+                                              : (_profileImageUrl.isNotEmpty
+                                                  ? NetworkImage(
+                                                    _profileImageUrl,
                                                   )
-                                                  as ImageProvider
-                                              : (_profileImagePath.isNotEmpty
-                                                  ? AssetImage(
-                                                        _profileImagePath,
-                                                      )
-                                                      as ImageProvider
-                                                  : null),
+                                                  : (_currentUser!.photoURL !=
+                                                              null
+                                                          ? NetworkImage(
+                                                            _currentUser!
+                                                                .photoURL!,
+                                                          )
+                                                          : null)
+                                                      as ImageProvider?),
                                       child:
-                                          (_currentUser!.photoURL == null &&
-                                                  _profileImagePath.isEmpty)
+                                          (_selectedImage == null &&
+                                                  _profileImageUrl.isEmpty &&
+                                                  _currentUser!.photoURL ==
+                                                      null)
                                               ? const Icon(
                                                 Icons.person,
                                                 size: 48,
@@ -317,9 +386,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                             color: Colors.white,
                                             size: 18,
                                           ),
-                                          onPressed: () {
-                                            // Implement image selection
-                                          },
+                                          onPressed: _pickImage,
                                         ),
                                       ),
                                     ),
@@ -385,8 +452,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 _isEditing
                                     ? TextFormField(
                                       controller: _emailController,
-                                      enabled:
-                                          false, // Email can't be changed easily in Firebase Auth
+                                      enabled: false,
                                       decoration: const InputDecoration(
                                         labelText: 'Email Address',
                                         prefixIcon: Icon(
@@ -479,14 +545,27 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ),
                           const SizedBox(height: 24),
-                          TextButton(
-                            onPressed: () async {
-                              await FirebaseAuth.instance.signOut();
-                              setState(() {
-                                _currentUser = null;
-                              });
-                            },
-                            child: const Text('Sign Out'),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                await FirebaseAuth.instance.signOut();
+                                setState(() {
+                                  _currentUser = null;
+                                });
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                                child: Text(
+                                  'Sign Out',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -507,13 +586,7 @@ class _ProfilePageState extends State<ProfilePage> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: () {
-              // Navigate to login screen
-              // Navigator.of(context).push(MaterialPageRoute(builder: (context) => LoginScreen()));
-            },
-            child: const Text('Log In'),
-          ),
+          ElevatedButton(onPressed: () {}, child: const Text('Log In')),
         ],
       ),
     );
