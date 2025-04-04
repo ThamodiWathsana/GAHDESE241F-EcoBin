@@ -18,6 +18,8 @@ class _BinReviewPageState extends State<BinReviewPage> {
   String _reviewText = '';
   File? _image;
   final ImagePicker _picker = ImagePicker();
+  bool _isAdmin = false; // Track if current user is admin
+  String _userName = 'Anonymous User'; // Store user's actual name
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -25,6 +27,45 @@ class _BinReviewPageState extends State<BinReviewPage> {
 
   Color get _primaryColor => Colors.green.shade600;
   Color get _backgroundColor => Colors.white;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfAdmin();
+    _getUserName(); // Fetch user's name when page loads
+  }
+
+  // Check if current user is an admin
+  Future<void> _checkIfAdmin() async {
+    User? currentUser = _auth.currentUser;
+    if (currentUser != null) {
+      DocumentSnapshot userDoc =
+          await _firestore.collection('users').doc(currentUser.uid).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+        setState(() {
+          _isAdmin = userData['isAdmin'] == true;
+        });
+      }
+    }
+  }
+
+  // Fetch user's name from Firestore
+  Future<void> _getUserName() async {
+    User? currentUser = _auth.currentUser;
+    if (currentUser != null) {
+      DocumentSnapshot userDoc =
+          await _firestore.collection('users').doc(currentUser.uid).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+        setState(() {
+          // Use the name field from your users collection, fallback to displayName, then email
+          _userName =
+              userData['name'] ?? currentUser.displayName ?? 'Anonymous User';
+        });
+      }
+    }
+  }
 
   void _selectRating(int rating) {
     setState(() {
@@ -59,14 +100,18 @@ class _BinReviewPageState extends State<BinReviewPage> {
     }
 
     try {
+      // Refresh user name before submitting to ensure we have the latest
+      await _getUserName();
+
       Map<String, dynamic> reviewData = {
-        'name':
-            currentUser.displayName ?? currentUser.email ?? 'Anonymous User',
+        'name': _userName, // Use the stored user name
         'userId': currentUser.uid,
         'rating': _rating,
         'comment': _reviewText.trim(),
         'date': FieldValue.serverTimestamp(),
         'hasImage': _image != null,
+        'adminResponse': null, // Initialize admin response as null
+        'hasAdminResponse': false, // Flag to check if admin has responded
       };
 
       if (_image != null) {
@@ -84,6 +129,22 @@ class _BinReviewPageState extends State<BinReviewPage> {
       _showSuccessSnackBar('Review submitted successfully');
     } catch (e) {
       _showErrorSnackBar('Error submitting review: $e');
+    }
+  }
+
+  // Function for admin to submit a reply
+  Future<void> _submitAdminReply(String reviewId, String replyText) async {
+    try {
+      if (replyText.trim().isNotEmpty) {
+        await _firestore.collection('reviews').doc(reviewId).update({
+          'adminResponse': replyText.trim(),
+          'adminResponseDate': FieldValue.serverTimestamp(),
+          'hasAdminResponse': true,
+        });
+        _showSuccessSnackBar('Reply submitted successfully');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error submitting reply: $e');
     }
   }
 
@@ -105,6 +166,44 @@ class _BinReviewPageState extends State<BinReviewPage> {
   void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
+  }
+
+  // Show admin reply dialog
+  void _showAdminReplyDialog(String reviewId) {
+    final TextEditingController replyController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(
+              'Admin Response',
+              style: TextStyle(color: _primaryColor),
+            ),
+            content: TextField(
+              controller: replyController,
+              decoration: InputDecoration(
+                hintText: 'Write your response here...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  _submitAdminReply(reviewId, replyController.text);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+                child: Text('Submit', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
     );
   }
 
@@ -241,12 +340,14 @@ class _BinReviewPageState extends State<BinReviewPage> {
 
             return ListView.builder(
               shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: snapshot.data!.docs.length,
               itemBuilder: (context, index) {
+                DocumentSnapshot doc = snapshot.data!.docs[index];
                 Map<String, dynamic> reviewData =
-                    snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                return _buildReviewCard(reviewData);
+                    doc.data() as Map<String, dynamic>;
+                String reviewId = doc.id;
+                return _buildReviewCard(reviewData, reviewId);
               },
             );
           },
@@ -255,21 +356,34 @@ class _BinReviewPageState extends State<BinReviewPage> {
     );
   }
 
-  Widget _buildReviewCard(Map<String, dynamic> review) {
+  Widget _buildReviewCard(Map<String, dynamic> review, String reviewId) {
     // Null-safe handling of review data
     final String userName = review['name'] ?? 'Anonymous User';
     final double rating = (review['rating'] ?? 0.0).toDouble();
     final String comment = review['comment'] ?? 'No comments available';
     final bool hasImage = review['hasImage'] == true;
     final String? imageUrl = hasImage ? review['imageUrl'] : null;
+    final bool hasAdminResponse = review['hasAdminResponse'] == true;
+    final String? adminResponse = review['adminResponse'];
+    final Timestamp? adminResponseDate =
+        review['adminResponseDate'] as Timestamp?;
+
+    String formattedDate = '';
+    if (adminResponseDate != null) {
+      DateTime date = adminResponseDate.toDate();
+      formattedDate = '${date.day}/${date.month}/${date.year}';
+    }
 
     return Card(
+      elevation: 3,
       margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // User information and rating
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -278,6 +392,7 @@ class _BinReviewPageState extends State<BinReviewPage> {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: _primaryColor,
+                    fontSize: 16,
                   ),
                 ),
                 Row(
@@ -291,18 +406,111 @@ class _BinReviewPageState extends State<BinReviewPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(comment),
+
+            const SizedBox(height: 10),
+
+            // User comment
+            Text(comment, style: const TextStyle(fontSize: 15)),
+
+            // Review image if available
             if (hasImage && imageUrl != null)
               Container(
-                margin: const EdgeInsets.only(top: 8),
-                height: 100,
+                margin: const EdgeInsets.only(top: 12),
+                height: 150, // Increased height for better visibility
+                width: double.infinity,
                 decoration: BoxDecoration(
                   image: DecorationImage(
                     image: NetworkImage(imageUrl),
                     fit: BoxFit.cover,
                   ),
                   borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+
+            // Admin response section
+            if (hasAdminResponse && adminResponse != null)
+              Container(
+                margin: const EdgeInsets.only(top: 16),
+                padding: const EdgeInsets.all(12),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Admin response header
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.support_agent,
+                          color: _primaryColor,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Admin Response',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _primaryColor,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (formattedDate.isNotEmpty) ...[
+                          const Spacer(),
+                          Text(
+                            formattedDate,
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+
+                    const Divider(height: 16),
+
+                    // Admin response content
+                    Text(adminResponse, style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ),
+
+            // Admin reply button (only visible to admins for reviews without responses)
+            if (_isAdmin)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child:
+                      hasAdminResponse
+                          ? TextButton.icon(
+                            onPressed: () => _showAdminReplyDialog(reviewId),
+                            icon: Icon(
+                              Icons.edit,
+                              color: Colors.blue,
+                              size: 18,
+                            ),
+                            label: Text(
+                              'Edit Response',
+                              style: TextStyle(color: Colors.blue),
+                            ),
+                          )
+                          : TextButton.icon(
+                            onPressed: () => _showAdminReplyDialog(reviewId),
+                            icon: Icon(
+                              Icons.reply,
+                              color: _primaryColor,
+                              size: 18,
+                            ),
+                            label: Text(
+                              'Reply',
+                              style: TextStyle(color: _primaryColor),
+                            ),
+                          ),
                 ),
               ),
           ],

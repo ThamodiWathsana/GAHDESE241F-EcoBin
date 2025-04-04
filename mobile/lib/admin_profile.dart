@@ -78,7 +78,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
   late TextEditingController _fullNameController;
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
-  late TextEditingController _roleController;
+  late TextEditingController _addressController;
   bool _isEditing = false;
   String _profileImageUrl = '';
   bool _isLoading = true;
@@ -92,7 +92,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
     _fullNameController = TextEditingController();
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
-    _roleController = TextEditingController();
+    _addressController = TextEditingController();
     _getCurrentUser();
   }
 
@@ -101,7 +101,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
     _fullNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _roleController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -120,7 +120,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
     try {
       DocumentSnapshot doc =
           await FirebaseFirestore.instance
-              .collection('admins')
+              .collection('users')
               .doc(_currentUser!.uid)
               .get();
 
@@ -130,7 +130,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
           _fullNameController.text = data['name'] ?? '';
           _emailController.text = _currentUser!.email ?? '';
           _phoneController.text = data['phone'] ?? '';
-          _roleController.text = data['role'] ?? 'System Administrator';
+          _addressController.text = data['address'] ?? '';
           _profileImageUrl = data['photoURL'] ?? '';
           _isLoading = false;
         });
@@ -138,7 +138,6 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         setState(() {
           _fullNameController.text = _currentUser!.displayName ?? '';
           _emailController.text = _currentUser!.email ?? '';
-          _roleController.text = 'System Administrator';
           _isLoading = false;
         });
       }
@@ -168,6 +167,11 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         setState(() {
           _selectedImage = File(pickedFile.path);
         });
+
+        // If not in edit mode, toggle to edit mode after picking an image
+        if (!_isEditing) {
+          _toggleEditMode();
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -211,7 +215,8 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
           'name': _fullNameController.text,
           'email': _emailController.text,
           'phone': _phoneController.text,
-          'role': _roleController.text,
+          'address': _addressController.text,
+          'role': 'admin', // Always set role as admin in the backend
         };
 
         if (photoURL != null) {
@@ -219,7 +224,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         }
 
         await FirebaseFirestore.instance
-            .collection('admins')
+            .collection('users')
             .doc(_currentUser!.uid)
             .set(adminData, SetOptions(merge: true));
 
@@ -354,39 +359,37 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
                                     ),
                                   ),
                                 ),
-                                if (_isEditing)
-                                  Positioned(
-                                    right: 0,
-                                    bottom: 0,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.1,
-                                            ),
-                                            spreadRadius: 1,
-                                            blurRadius: 2,
-                                            offset: const Offset(0, 1),
-                                          ),
-                                        ],
-                                      ),
-                                      child: CircleAvatar(
-                                        backgroundColor:
-                                            Theme.of(context).primaryColor,
-                                        radius: 18,
-                                        child: IconButton(
-                                          icon: const Icon(
-                                            Icons.camera_alt,
-                                            color: Colors.white,
-                                            size: 18,
-                                          ),
-                                          onPressed: _pickImage,
+                                // Camera icon is now visible regardless of edit mode
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          spreadRadius: 1,
+                                          blurRadius: 2,
+                                          offset: const Offset(0, 1),
                                         ),
+                                      ],
+                                    ),
+                                    child: CircleAvatar(
+                                      backgroundColor:
+                                          Theme.of(context).primaryColor,
+                                      radius: 18,
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.camera_alt,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                        onPressed: _pickImage,
                                       ),
                                     ),
                                   ),
+                                ),
                               ],
                             ),
                           ),
@@ -492,26 +495,26 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
                                 const SizedBox(height: 24),
                                 _isEditing
                                     ? TextFormField(
-                                      controller: _roleController,
+                                      controller: _addressController,
                                       decoration: const InputDecoration(
-                                        labelText: 'Admin Role',
+                                        labelText: 'Address',
                                         prefixIcon: Icon(
-                                          Icons.admin_panel_settings_outlined,
+                                          Icons.location_on_outlined,
                                           color: Color(0xFF2E7D32),
                                           size: 20,
                                         ),
                                       ),
                                       validator: (value) {
                                         if (value == null || value.isEmpty) {
-                                          return 'Please enter your admin role';
+                                          return 'Please enter your address';
                                         }
                                         return null;
                                       },
                                     )
                                     : _buildProfileField(
-                                      Icons.admin_panel_settings_outlined,
-                                      'Admin Role',
-                                      _roleController.text,
+                                      Icons.location_on_outlined,
+                                      'Address',
+                                      _addressController.text,
                                     ),
                               ],
                             ),
@@ -537,29 +540,6 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
                                 ),
                               ),
                             ),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () async {
-                                await FirebaseAuth.instance.signOut();
-                                setState(() {
-                                  _currentUser = null;
-                                });
-                              },
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                                child: Text(
-                                  'Sign Out',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
