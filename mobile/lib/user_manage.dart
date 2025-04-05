@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart'; // Added for iOS-style back button
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -67,7 +68,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // Change Role Button
                     _buildOptionButton(
                       icon: Icons.people_alt_outlined,
                       label: 'Change Role',
@@ -76,7 +76,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         _changeUserRole(user);
                       },
                     ),
-                    // Delete User Button
                     _buildOptionButton(
                       icon: Icons.delete_outline,
                       label: 'Delete User',
@@ -209,11 +208,16 @@ class _UserManagementPageState extends State<UserManagementPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.green[800],
+        leading: CupertinoNavigationBarBackButton(
+          color: Colors.white,
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
         title: Text(
           'User Management',
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-
         centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot>(

@@ -86,6 +86,11 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
   File? _selectedImage;
   final ImagePicker _picker = ImagePicker();
 
+  // Reference to your specific Firebase Storage bucket
+  final FirebaseStorage _storage = FirebaseStorage.instanceFor(
+    bucket: 'gs://smart-waste-management-3041a.appspot.com',
+  );
+
   @override
   void initState() {
     super.initState();
@@ -161,6 +166,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         source: ImageSource.gallery,
         maxWidth: 800,
         maxHeight: 800,
+        imageQuality: 85, // Added quality parameter
       );
 
       if (pickedFile != null) {
@@ -183,6 +189,57 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
     }
   }
 
+  Future<String?> _uploadImage() async {
+    if (_selectedImage == null) return null;
+
+    try {
+      String filename = path.basename(_selectedImage!.path);
+      int dotIndex = filename.indexOf('.');
+      String fileExtension =
+          dotIndex != -1 && dotIndex < filename.length - 1
+              ? filename.substring(dotIndex + 1)
+              : 'jpg';
+
+      String storagePath =
+          'admin_profile_pictures/${_currentUser!.uid}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+
+      // Create storage reference with explicit path
+      final Reference storageRef = _storage.ref().child(storagePath);
+
+      // Start upload with metadata
+      final SettableMetadata metadata = SettableMetadata(
+        contentType: 'image/$fileExtension',
+        customMetadata: {'userId': _currentUser!.uid},
+      );
+
+      // Upload with metadata and track progress
+      UploadTask uploadTask = storageRef.putFile(_selectedImage!, metadata);
+
+      // Monitor upload progress if needed
+      uploadTask.snapshotEvents.listen(
+        (TaskSnapshot snapshot) {
+          print(
+            'Upload progress: ${(snapshot.bytesTransferred / snapshot.totalBytes) * 100}%',
+          );
+        },
+        onError: (e) {
+          print('Upload error: $e');
+        },
+      );
+
+      // Wait for upload to complete
+      await uploadTask;
+
+      // Get download URL
+      String downloadUrl = await storageRef.getDownloadURL();
+      print('Image uploaded successfully: $downloadUrl');
+      return downloadUrl;
+    } catch (e) {
+      print('Error uploading image: $e');
+      throw e;
+    }
+  }
+
   void _saveProfile() async {
     if (_formKey.currentState!.validate()) {
       try {
@@ -192,23 +249,20 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
 
         String? photoURL;
         if (_selectedImage != null) {
-          String filename = path.basename(_selectedImage!.path);
-          int dotIndex = filename.indexOf('.');
-          String fileExtension =
-              dotIndex != -1 && dotIndex < filename.length - 1
-                  ? filename.substring(dotIndex + 1)
-                  : 'jpg';
-
-          final storageRef = FirebaseStorage.instance
-              .ref()
-              .child('admin_profile_pictures')
-              .child(
-                '${_currentUser!.uid}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension',
-              );
-          await storageRef.putFile(_selectedImage!);
-          photoURL = await storageRef.getDownloadURL();
-
-          await _currentUser!.updatePhotoURL(photoURL);
+          try {
+            photoURL = await _uploadImage();
+            if (photoURL != null) {
+              await _currentUser!.updatePhotoURL(photoURL);
+            }
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error uploading profile image: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            // Continue with other data updates even if image upload fails
+          }
         }
 
         Map<String, dynamic> adminData = {
@@ -217,6 +271,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
           'phone': _phoneController.text,
           'address': _addressController.text,
           'role': 'admin', // Always set role as admin in the backend
+          'updatedAt': FieldValue.serverTimestamp(),
         };
 
         if (photoURL != null) {
@@ -234,7 +289,9 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
           _isEditing = false;
           _isLoading = false;
           _selectedImage = null;
-          _profileImageUrl = photoURL ?? _profileImageUrl;
+          if (photoURL != null) {
+            _profileImageUrl = photoURL;
+          }
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -327,36 +384,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
                                   child: CircleAvatar(
                                     radius: 60,
                                     backgroundColor: Colors.white,
-                                    child: CircleAvatar(
-                                      radius: 58,
-                                      backgroundColor: Colors.grey[100],
-                                      backgroundImage:
-                                          _selectedImage != null
-                                              ? FileImage(_selectedImage!)
-                                              : (_profileImageUrl.isNotEmpty
-                                                  ? NetworkImage(
-                                                    _profileImageUrl,
-                                                  )
-                                                  : (_currentUser!.photoURL !=
-                                                              null
-                                                          ? NetworkImage(
-                                                            _currentUser!
-                                                                .photoURL!,
-                                                          )
-                                                          : null)
-                                                      as ImageProvider?),
-                                      child:
-                                          (_selectedImage == null &&
-                                                  _profileImageUrl.isEmpty &&
-                                                  _currentUser!.photoURL ==
-                                                      null)
-                                              ? const Icon(
-                                                Icons.admin_panel_settings,
-                                                size: 48,
-                                                color: Color(0xFFAEAEAE),
-                                              )
-                                              : null,
-                                    ),
+                                    child: _buildProfileImage(),
                                   ),
                                 ),
                                 // Camera icon is now visible regardless of edit mode
@@ -545,6 +573,45 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
                     ),
                   )),
     );
+  }
+
+  Widget _buildProfileImage() {
+    // Handle image display with better error handling
+    if (_selectedImage != null) {
+      return CircleAvatar(
+        radius: 58,
+        backgroundColor: Colors.grey[100],
+        backgroundImage: FileImage(_selectedImage!),
+      );
+    } else if (_profileImageUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: 58,
+        backgroundColor: Colors.grey[100],
+        backgroundImage: NetworkImage(_profileImageUrl),
+        onBackgroundImageError: (exception, stackTrace) {
+          print('Error loading profile image: $exception');
+        },
+      );
+    } else if (_currentUser?.photoURL != null) {
+      return CircleAvatar(
+        radius: 58,
+        backgroundColor: Colors.grey[100],
+        backgroundImage: NetworkImage(_currentUser!.photoURL!),
+        onBackgroundImageError: (exception, stackTrace) {
+          print('Error loading profile image: $exception');
+        },
+      );
+    } else {
+      return CircleAvatar(
+        radius: 58,
+        backgroundColor: Colors.grey[100],
+        child: const Icon(
+          Icons.admin_panel_settings,
+          size: 48,
+          color: Color(0xFFAEAEAE),
+        ),
+      );
+    }
   }
 
   Widget _buildNotLoggedInView() {

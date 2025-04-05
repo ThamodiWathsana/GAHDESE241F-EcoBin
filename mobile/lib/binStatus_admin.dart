@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -67,18 +68,21 @@ class _BinStatusPageState extends State<BinStatusPage> {
     }
   }
 
+  Color get _primaryColor => Colors.green.shade600;
+  Color get _backgroundColor => Colors.white;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(
-          'Waste Bin Monitoring',
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
+        title: Text('Bin Monitoring', style: TextStyle(color: Colors.white)),
         centerTitle: true,
-        backgroundColor: Colors.green.shade600,
-        elevation: 0,
+        backgroundColor: _primaryColor, // Using the green color defined earlier
+        leading: CupertinoNavigationBarBackButton(
+          color: Colors.white,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         iconTheme: IconThemeData(color: Colors.white),
       ),
       body:
