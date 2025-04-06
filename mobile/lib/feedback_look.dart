@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -220,6 +221,7 @@ class _FeedbackManagementPageState extends State<FeedbackManagementPage> {
       appBar: AppBar(
         title: const Text('Feedback Management'),
         backgroundColor: const Color(0xFF4CAF50),
+        leading: const CupertinoNavigationBarBackButton(color: Colors.white),
       ),
       body:
           !_isAdminChecked

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -264,6 +265,10 @@ class _ProfilePageState extends State<ProfilePage> {
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Profile' : 'My Profile'),
         centerTitle: true,
+        leading: CupertinoNavigationBarBackButton(
+          color: Colors.white,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         actions: [
           if (!_isEditing)
             IconButton(

@@ -349,8 +349,7 @@ class _EcoBinDashboardState extends State<EcoBinDashboard> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder:
-                                      (context) => const EventsAndUpdatesPage(),
+                                  builder: (context) => const EventsPage(),
                                 ),
                               );
                             },
@@ -414,9 +413,7 @@ class _EcoBinDashboardState extends State<EcoBinDashboard> {
             case 1:
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const EventsAndUpdatesPage(),
-                ),
+                MaterialPageRoute(builder: (context) => const EventsPage()),
               );
               break;
             case 2:
